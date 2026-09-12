@@ -1,2 +1,5 @@
 CLAUDE.md
 venv/
+.DS_Store
+__pycache__/
+ckpt/
