@@ -6,7 +6,7 @@ from dataset import SpeechDataset
 
 MODEL = "tiny"
 EPOCHS = 2
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 LR = 1e-5
 EVAL_EVERY = 200
 CKPT = "ckpt/run2_best.pt"

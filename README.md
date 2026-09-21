@@ -203,3 +203,8 @@ form (e.g. kanji→kana via `fugashi`/`MeCab`) before scoring.
       and compare CER + worst-clip loop count against run1's 44.66%.
 - [ ] Stage 5 (test-set eval + docs), then bigger model (`base`/`small`) —
       expected to be the largest single CER win.
+- [ ] Data-scaling test: train `tiny` on 2x (~16h) and 4x (~32h) data, same
+      hyperparameters, and plot dev CER vs data size. Still dropping per
+      doubling → data-limited; flat → capacity-limited, move to `base`/`small`.
+      Dev/test stay frozen; add new clips to train only (no overlap) and do NOT
+      re-run `Data/prepair_data.py` as-is (it reshuffles the splits).
