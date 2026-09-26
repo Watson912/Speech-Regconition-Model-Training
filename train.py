@@ -1,16 +1,16 @@
 import csv, time
 from pathlib import Path
 import torch, torch.nn.functional as F, whisper
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset, Subset
 from dataset import SpeechDataset
 
-MODEL = "tiny"
+MODEL = "small"
 EPOCHS = 2
-BATCH_SIZE = 4
+BATCH_SIZE = 1
 LR = 1e-5
 EVAL_EVERY = 200
-CKPT = "ckpt/run2_best.pt"
-RUN = "runs/run2"          # loss log -> runs/run1.csv, plot -> runs/run1.png
+CKPT = "ckpt/run3_best.pt"
+RUN = "runs/run3"          # loss log -> runs/run3.csv, plot -> runs/run3.png
 
 def main():
 
@@ -21,9 +21,12 @@ def main():
     Path(RUN).parent.mkdir(parents=True, exist_ok=True)
 
     model = whisper.load_model(MODEL).to(device)
-    train_ds = SpeechDataset("Data/manifests/train.jsonl", min_duration=1.0)
+    train_ds_main = SpeechDataset("Data/manifests/train.jsonl", min_duration=1.0)
+    train_ds_extra = SpeechDataset("Data/manifests/train_extra.jsonl", min_duration=1.0)
+    train_ds = ConcatDataset([train_ds_main, train_ds_extra])
+    train_ds = Subset(train_ds, range(0, len(train_ds), 2))  # half the data, for now
     dev_ds = SpeechDataset("Data/manifests/dev.jsonl")
-    train_loader = DataLoader(train_ds, BATCH_SIZE, shuffle=True, collate_fn=train_ds.collate_fn)
+    train_loader = DataLoader(train_ds, BATCH_SIZE, shuffle=True, collate_fn=train_ds_main.collate_fn)
     dev_loader = DataLoader(dev_ds, BATCH_SIZE, shuffle=False, collate_fn=dev_ds.collate_fn)
 
     opt = torch.optim.AdamW(model.parameters(), lr=LR)
