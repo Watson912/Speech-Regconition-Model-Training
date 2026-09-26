@@ -14,7 +14,7 @@ RUN = "runs/run3"          # loss log -> runs/run3.csv, plot -> runs/run3.png
 
 def main():
 
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    device = "cuda" if torch.backends.mps.is_available() else "cpu"
 
     # make sure output dirs exist
     Path(CKPT).parent.mkdir(parents=True, exist_ok=True)
