@@ -1,15 +1,16 @@
-import csv, time
+import csv, itertools, time
 from pathlib import Path
 import torch, torch.nn.functional as F, whisper
 from torch.utils.data import DataLoader, ConcatDataset, Subset
 from dataset import SpeechDataset
 
-MODEL = "small"
+MODEL = "tiny"
 EPOCHS = 2
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 LR = 1e-5
 EVAL_EVERY = 200
 CKPT = "ckpt/run3_best.pt"
+RESUME_CKPT = "ckpt/run3_resume.pt"   # full training state, for continuing after a disconnect
 RUN = "runs/run3"          # loss log -> runs/run3.csv, plot -> runs/run3.png
 
 def main():
@@ -31,6 +32,20 @@ def main():
 
     opt = torch.optim.AdamW(model.parameters(), lr=LR)
 
+    total_steps = EPOCHS * len(train_loader)
+    step = 0
+    best = float("inf")
+    history = []          # (step, train_loss, dev_loss)
+
+    if Path(RESUME_CKPT).exists():
+        state = torch.load(RESUME_CKPT, map_location=device)
+        model.load_state_dict(state["model"])
+        opt.load_state_dict(state["optimizer"])
+        step = state["step"]
+        best = state["best"]
+        history = state["history"]
+        print(f"resumed from {RESUME_CKPT} at step {step}/{total_steps}")
+
     def compute_loss(batch):
         mels, input_ids, labels = [x.to(device) for x in batch]
         logits = model(tokens=input_ids[:, :-1], mel=mels)
@@ -47,33 +62,35 @@ def main():
         model.train()
         return sum(losses) / len(losses)
 
-    # history: one row per eval, written to CSV at the end for plotting
-    history = []          # (step, train_loss, dev_loss)
-
-    best = float("inf")
-    step = 0
     model.train()
-    for epoch in range(EPOCHS):
-        for batch in train_loader:
-            loss = compute_loss(batch)
-            opt.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
-            step += 1
+    batches = itertools.islice(itertools.chain.from_iterable(itertools.repeat(train_loader, EPOCHS)), step, total_steps)
+    for batch in batches:
+        loss = compute_loss(batch)
+        opt.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        opt.step()
+        step += 1
 
-            if step % 50 == 0:
-                print(f"epoch {epoch} step {step} | train loss {loss.item():.4f}")
+        if step % 50 == 0:
+            print(f"step {step}/{total_steps} | train loss {loss.item():.4f}")
 
-            if step % EVAL_EVERY == 0:
-                dev = evaluate()
-                history.append((step, loss.item(), dev))
-                flag = ""
-                if dev < best:
-                    best = dev
-                    torch.save(model.state_dict(), CKPT)
-                    flag = " <-- saved"
-                print(f" [eval] step {step} | dev loss {dev:.4f}{flag}")
+        if step % EVAL_EVERY == 0:
+            dev = evaluate()
+            history.append((step, loss.item(), dev))
+            flag = ""
+            if dev < best:
+                best = dev
+                torch.save(model.state_dict(), CKPT)
+                flag = " <-- saved"
+            torch.save({
+                "model": model.state_dict(),
+                "optimizer": opt.state_dict(),
+                "step": step,
+                "best": best,
+                "history": history,
+            }, RESUME_CKPT)
+            print(f" [eval] step {step} | dev loss {dev:.4f}{flag}")
 
     # write the loss log
     with open(f"{RUN}.csv", "w", newline="") as f:
